@@ -499,7 +499,7 @@ namespace SharpCifs.Smb
         /// do not follow the prescribed syntax
         /// </exception>
         public SmbFile(string url)
-            : this(new Uri(url))
+            : this(SafeEscapeUri(url))
         {
         }
 
@@ -523,7 +523,7 @@ namespace SharpCifs.Smb
         /// 	</exception>
         public SmbFile(SmbFile context, string name)
             : this(context.IsWorkgroup0
-                () ? new Uri("smb://" + name) : new Uri(context.Url.AbsoluteUri + name),
+                () ? SafeEscapeUri("smb://" + name) : SafeEscapeUri(context.Url.AbsoluteUri + name),
                 context.Auth)
         {
 
@@ -537,7 +537,7 @@ namespace SharpCifs.Smb
                 {
                     Tree = context.Tree;
                     _dfsReferral = context._dfsReferral;
-                }                
+                }
             }
         }
 
@@ -563,7 +563,7 @@ namespace SharpCifs.Smb
         }*/
 
         public SmbFile(string context, string name)
-            : this(new Uri(context + name))
+            : this(SafeEscapeUri(context + name))
         {
 
         }
@@ -582,7 +582,7 @@ namespace SharpCifs.Smb
         /// <exception cref="System.UriFormatException">If the <code>url</code> parameter does not follow the prescribed syntax
         /// 	</exception>
         public SmbFile(string url, NtlmPasswordAuthentication auth)
-            : this(new Uri(url, UriKind.RelativeOrAbsolute),
+            : this(SafeEscapeUri(url, UriKind.RelativeOrAbsolute),
              auth)
         {
 
@@ -605,7 +605,7 @@ namespace SharpCifs.Smb
         /// 	</exception>
         public SmbFile(string url, NtlmPasswordAuthentication auth, int shareAccess)
             : this
-                (new Uri(url), auth)
+                (SafeEscapeUri(url), auth)
         {
             // Initially null; set by getUncPath; dir must end with '/'
             // Can be null
@@ -641,7 +641,7 @@ namespace SharpCifs.Smb
         /// </exception>
         public SmbFile(string context, string name, NtlmPasswordAuthentication auth)
             : this
-                (new Uri(context + name)
+                (SafeEscapeUri(context + name)
                 , auth)
         {
 
@@ -674,7 +674,7 @@ namespace SharpCifs.Smb
         /// </exception>
         public SmbFile(string context, string name, NtlmPasswordAuthentication auth, int
             shareAccess)
-            : this(new Uri(context + name), auth)
+            : this(SafeEscapeUri(context + name), auth)
         {
             if ((shareAccess & ~(FileShareRead | FileShareWrite | FileShareDelete)) !=
                 0)
@@ -777,7 +777,7 @@ namespace SharpCifs.Smb
         internal SmbFile(SmbFile context, string name, int type, int attributes
             , long createTime, long lastModified, long size)
             : this(context.IsWorkgroup0() ?
-                new Uri("smb://" + name + "/") : new Uri(context.Url.AbsoluteUri +
+                SafeEscapeUri("smb://" + name + "/") : SafeEscapeUri(context.Url.AbsoluteUri +
                 name + ((attributes & AttrDirectory) > 0 ? "/" : string.Empty)))
         {
             Auth = context.Auth;
@@ -1468,7 +1468,7 @@ namespace SharpCifs.Smb
         /// <returns>The uncanonicalized full URL of this SMB resource.</returns>
         public virtual string GetPath()
         {
-            return Url.ToString();
+            return Url.OriginalString;
         }
 
         internal virtual string GetUncPath0()
@@ -2386,9 +2386,21 @@ namespace SharpCifs.Smb
             }
             //Iterator iter = map.Keys.Iterator();
             //while (iter.HasNext())
+            bool hideAdminShares = Config.GetBoolean("sharpcifs.smb.client.hideAdminShares", true);
+
             foreach (var item in map.Keys)
             {
                 e = (IFileEntry)item;
+
+                if (hideAdminShares)
+                {
+                    SmbShareInfo smbShareInfo = item as SmbShareInfo;
+                    if (smbShareInfo != null && (uint)smbShareInfo.Type == 0x80000000)
+                    {
+                        continue;
+                    }
+                }
+
                 string name = e.GetName();
                 if (fnf != null && fnf.Accept(this, name) == false)
                 {
@@ -3750,6 +3762,14 @@ namespace SharpCifs.Smb
         public virtual Ace[] GetSecurity()
         {
             return GetSecurity(false);
+        }
+
+        private static Uri SafeEscapeUri(string uri, UriKind uriKind = UriKind.Absolute)
+        {
+            //Kindof bad workaround since EscapeUriString will not encode #
+            UriBuilder urib = new UriBuilder();
+            urib.Path = Uri.EscapeUriString(uri);
+            return new Uri(urib.Path, uriKind);
         }
     }
 }

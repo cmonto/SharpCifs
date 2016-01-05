@@ -19,7 +19,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text;
 using Windows.Storage;
-using Windows.UI.Notifications;
+//using Windows.UI.Notifications;
 using SharpCifs.Util.Sharpen;
 
 namespace SharpCifs.Util
