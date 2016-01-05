@@ -7,7 +7,7 @@ namespace SharpCifs.Util.Sharpen
     {
         public void Put(object key, object value)
         {            
-            Add(key, value);
+            this[key] = value;
         }
 
         public object Get(object key)
