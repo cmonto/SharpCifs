@@ -21,9 +21,16 @@ using System.Threading;
 
 namespace SharpCifs.Util.Sharpen
 {
+    /// <summary>
+    /// Extended Socket
+    /// </summary>
+    /// <remarks>
+    /// System.Net.Scokets.Socket
+    /// https://docs.microsoft.com/ja-jp/dotnet/api/system.net.sockets.socket?view=netcore-1.1
+    /// </remarks>
     public class SocketEx : Socket
     {
-        private int _soTimeOut = -1;       
+        private int _soTimeOut = -1;
 
         public int SoTimeOut
         {
@@ -46,35 +53,60 @@ namespace SharpCifs.Util.Sharpen
             }
         }
 
-        public SocketEx(AddressFamily addressFamily, SocketType socketType, ProtocolType protocolType)
+        public SocketEx(AddressFamily addressFamily, 
+                        SocketType socketType, 
+                        ProtocolType protocolType)
             : base(addressFamily, socketType, protocolType)
         {
-
         }
 
         public void Connect(IPEndPoint endPoint, int timeOut)
         {
-            AutoResetEvent autoReset = new AutoResetEvent(false);
-
-            SocketAsyncEventArgs args = new SocketAsyncEventArgs
+            using (var evt = new ManualResetEventSlim(false))
             {
-                RemoteEndPoint = endPoint
-            };
+                using (var args = new SocketAsyncEventArgs
+                {
+                    RemoteEndPoint = endPoint
+                })
+                {
+                    var isEvtSetted = false;
 
-            args.Completed += delegate {
-                autoReset.Set();
-            };
+                    args.Completed += delegate
+                    {
+                        if (!isEvtSetted)
+                        {
+                            evt.Set();
+                            isEvtSetted = true;
+                        }
+                    };
 
-            ConnectAsync(args);
+                    if (ConnectAsync(args))
+                    {
+                        //asynchronous action.
+                        if (!evt.Wait(timeOut))
+                        {
+                            CancelConnectAsync(args);
+                            throw new ConnectException("Can't connect to end point.");
+                        }
 
-            if (!autoReset.WaitOne(timeOut))
-            {
-                CancelConnectAsync(args);
-                throw new ConnectException("Can't connect to end point.");
-            }
-            if (args.SocketError != SocketError.Success)
-            {
-                throw new ConnectException("Can't connect to end point.");
+                        if (args.SocketError != SocketError.Success)
+                        {
+                            throw new ConnectException("Can't connect to end point.");
+                        }
+                    }
+                    else
+                    {
+                        //synchronous action, and it completed.
+                        //evt.Completed event not be raised.
+                        //https://docs.microsoft.com/ja-jp/dotnet/api/system.net.sockets.socket.connectasync?view=netcore-1.1#System_Net_Sockets_Socket_ConnectAsync_System_Net_Sockets_SocketAsyncEventArgs_
+                    }
+
+                    if (!isEvtSetted)
+                    {
+                        evt.Set();
+                        isEvtSetted = true;
+                    }
+                }
             }
         }
 
@@ -89,48 +121,93 @@ namespace SharpCifs.Util.Sharpen
 
         public int Receive(byte[] buffer, int offset, int count)
         {
-            AutoResetEvent autoReset = new AutoResetEvent(false);
-            SocketAsyncEventArgs args = new SocketAsyncEventArgs();
-
-            args.UserToken = this;
-            args.SetBuffer(buffer, offset, count);
-
-            args.Completed += delegate 
+            using (var evt = new ManualResetEventSlim(false))
             {
-                autoReset.Set();
-            };
+                using (var args = new SocketAsyncEventArgs
+                {
+                    UserToken = this
+                })
+                {
+                    var isEvtSetted = false;
 
-            if (ReceiveAsync(args))
-            {
-                if (!autoReset.WaitOne(_soTimeOut))
-                {                                      
-                    throw new TimeoutException("No data received.");
+                    args.SetBuffer(buffer, offset, count);
+
+                    args.Completed += delegate
+                    {
+                        if (!isEvtSetted)
+                        {
+                            evt.Set();
+                            isEvtSetted = true;
+                        }
+                    };
+
+                    if (ReceiveAsync(args))
+                    {
+                        //asynchronous action.
+                        if (!evt.Wait(_soTimeOut))
+                            throw new TimeoutException("No data received.");
+                    }
+                    else
+                    {
+                        //synchronous action, and it completed.
+                        //evt.Completed event not be raised.
+                        //https://docs.microsoft.com/ja-jp/dotnet/api/system.net.sockets.socket.receiveasync?view=netcore-1.1#System_Net_Sockets_Socket_ReceiveAsync_System_Net_Sockets_SocketAsyncEventArgs_
+                    }
+
+                    if (!isEvtSetted)
+                    {
+                        evt.Set();
+                        isEvtSetted = true;
+                    }
+
+                    return args.BytesTransferred;
                 }
             }
-
-            return args.BytesTransferred;
         }
 
         public void Send(byte[] buffer, int offset, int length, EndPoint destination = null)
         {
-            AutoResetEvent autoReset = new AutoResetEvent(false);
-            SocketAsyncEventArgs args = new SocketAsyncEventArgs();
-
-            args.UserToken = this;
-            args.SetBuffer(buffer, offset, length);
-
-            args.Completed += delegate 
+            using (var evt = new ManualResetEventSlim(false))
             {
-                autoReset.Set();
-            };
+                using (SocketAsyncEventArgs args = new SocketAsyncEventArgs
+                {
+                    UserToken = this
+                })
+                {
+                    var isEvtSetted = false;
 
-            args.RemoteEndPoint = destination ?? RemoteEndPoint;
+                    args.SetBuffer(buffer, offset, length);
 
+                    args.Completed += delegate
+                    {
+                        if (!isEvtSetted)
+                        {
+                            evt.Set();
+                            isEvtSetted = true;
+                        }
+                    };
 
-            SendToAsync(args);
-            if (!autoReset.WaitOne(_soTimeOut))
-            {
-                throw new TimeoutException("No data sent.");
+                    args.RemoteEndPoint = destination ?? RemoteEndPoint;
+
+                    if (SendToAsync(args))
+                    {
+                        //asynchronous action.
+                        if (!evt.Wait(_soTimeOut))
+                            throw new TimeoutException("No data sent.");
+                    }
+                    else
+                    {
+                        //synchronous action, and it completed.
+                        //evt.Completed event not be raised.
+                        //https://docs.microsoft.com/ja-jp/dotnet/api/system.net.sockets.socket.sendasync?view=netcore-1.1#System_Net_Sockets_Socket_SendAsync_System_Net_Sockets_SocketAsyncEventArgs_
+                    }
+
+                    if (!isEvtSetted)
+                    {
+                        evt.Set();
+                        isEvtSetted = true;
+                    }
+                }
             }
         }
 

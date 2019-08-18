@@ -11,14 +11,21 @@ using System.Security.Cryptography;
 // * Copyright (c) Microsoft Corporation.  All rights reserved.
 // **************************************************************
 
+
 #if SILVERLIGHT
+#else
+//public class MD5Managed : MD5
+#endif
 namespace SharpCifs.Util.Sharpen
 {
     public class Md5Managed : HashAlgorithm
-#else
-public class MD5Managed : MD5
-#endif
+
     {
+        public static Md5Managed Create()
+        {
+            return new Md5Managed();
+        }
+
         private byte[] _data;
         private AbcdStruct _abcd;
         private Int64 _totalLength;
@@ -26,7 +33,8 @@ public class MD5Managed : MD5
 
         public Md5Managed()
         {
-            HashSizeValue = 0x80;
+            //field cannot access
+            //HashSizeValue = 0x80;
             Initialize();
         }
 
@@ -74,8 +82,10 @@ public class MD5Managed : MD5
 
         protected override byte[] HashFinal()
         {
-            HashValue = Md5Core.GetHashFinalBlock(_data, 0, _dataSize, _abcd, _totalLength * 8);
-            return HashValue;
+            //field cannot access
+            //HashValue = Md5Core.GetHashFinalBlock(_data, 0, _dataSize, _abcd, _totalLength * 8);
+            //return HashValue;
+            return Md5Core.GetHashFinalBlock(_data, 0, _dataSize, _abcd, _totalLength * 8);
         }
     }
 }

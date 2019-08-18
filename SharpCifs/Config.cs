@@ -20,6 +20,7 @@ using System.Net;
 using System.Security;
 using SharpCifs.Util;
 using SharpCifs.Util.Sharpen;
+using System.Linq;
 
 namespace SharpCifs
 {
@@ -113,6 +114,14 @@ namespace SharpCifs
         }
 
         /// <summary>
+        /// Apply the value written in Config.
+        /// </summary>
+        public static void Apply()
+        {
+            Smb.SmbConstants.ApplyConfig();
+        }
+
+        /// <summary>
         /// This static method registers the SMB URL protocol handler which is
         /// required to use SMB URLs with the <tt>java.net.URL</tt> class.
         /// </summary>
@@ -137,7 +146,7 @@ namespace SharpCifs
 
         // supress javadoc constructor summary by removing 'protected'
         /// <summary>Set the default properties of the static Properties used by <tt>Config</tt>.
-        /// 	</summary>
+        /// </summary>
         /// <remarks>
         /// Set the default properties of the static Properties used by <tt>Config</tt>. This permits
         /// a different Properties object/file to be used as the source of properties for
@@ -222,7 +231,7 @@ namespace SharpCifs
 
         /// <summary>Retrieve a <code>String</code>.</summary>
         /// <remarks>Retrieve a <code>String</code>. If the property is not found, <code>null</code> is returned.
-        /// 	</remarks>
+        /// </remarks>
         public static string GetProperty(string key)
         {
             return (string)_prp.GetProperty(key);
@@ -256,7 +265,7 @@ namespace SharpCifs
 
         /// <summary>Retrieve an <code>int</code>.</summary>
         /// <remarks>Retrieve an <code>int</code>. If the property is not found, <code>-1</code> is returned.
-        /// 	</remarks>
+        /// </remarks>
         public static int GetInt(string key)
         {
             string s = (string)_prp.GetProperty(key);
@@ -334,11 +343,18 @@ namespace SharpCifs
         public static IPAddress GetLocalHost()
         {
             string addr = (string)_prp.GetProperty("jcifs.smb.client.laddr");
+
+            // When "laddr" is NOT specified, all addresses of the local I/F are used.
+            if (string.IsNullOrEmpty(addr))
+                addr = "0.0.0.0";
+
+            IPAddress result = null;
+
             if (addr != null)
             {
                 try
                 {
-                    return Extensions.GetAddressByName(addr);
+                    result = Extensions.GetAddressByName(addr);
                 }
                 catch (UnknownHostException uhe)
                 {
@@ -349,12 +365,20 @@ namespace SharpCifs
                     }
                 }
             }
-            return null;
+
+            if (result == null)
+            {
+                var addrs = Extensions.GetLocalAddresses();
+                if (addrs != null)
+                    result = addrs.FirstOrDefault();
+            }
+
+            return result;
         }
 
         /// <summary>Retrieve a boolean value.</summary>
         /// <remarks>Retrieve a boolean value. If the property is not found, the value of <code>def</code> is returned.
-        /// 	</remarks>
+        /// </remarks>
         public static bool GetBoolean(string key, bool def)
         {
             string b = GetProperty(key);
